@@ -1,119 +1,121 @@
 "use client";
-import React, { useCallback } from "react";
-import Image from "next/image";
-import { FaTwitter } from "react-icons/fa6";
-import { GoHomeFill } from "react-icons/go";
-import { FaHashtag } from "react-icons/fa";
-import { IoNotifications, IoBookmark } from "react-icons/io5";
-import { SlEnvolope, SlOptions } from "react-icons/sl";
-import { LuUser } from "react-icons/lu";
 import FeedCard from "@/components/FeedCard";
-import { BiMoney } from "react-icons/bi";
-import { CredentialResponse, GoogleLogin } from "@react-oauth/google";
-import { toast } from "react-hot-toast";
+import TwitterLayout from "@/components/layout/TwitterLayout";
+import { Tweet } from "@/gql/graphql";
+import { useCreateTweet, useTweets } from "@/hooks/tweet";
+import { useCurrentUser } from "@/hooks/user";
+import Image from "next/image";
+import { useCallback, useState } from "react";
+import { BiImageAlt } from "react-icons/bi";
 import { graphqlClient } from "@/clients/api";
-import { verify } from "crypto";
-import { veryUserGoogleTokenQuery } from "@/graphql/query/user";
+import { getSignedUrlForTweetQuery } from "@/graphql/query/tweet";
+import axios from "axios";
+import { toast } from "react-hot-toast";
 
-type TwitterSidebarButton = {
-  title: string;
-  icon: React.ReactNode;
-};
-
-const sidebarButtons: TwitterSidebarButton[] = [
-  {
-    title: "Home",
-    icon: <GoHomeFill />,
-  },
-  {
-    title: "Explore",
-    icon: <FaHashtag />,
-  },
-  {
-    title: "Notifications",
-    icon: <IoNotifications />,
-  },
-  {
-    title: "Messages",
-    icon: <SlEnvolope />,
-  },
-  {
-    title: "Bookmarks",
-    icon: <IoBookmark />,
-  },
-  {
-    title: "Twitter Blue",
-    icon: <BiMoney />,
-  },
-
-  {
-    title: "Profile",
-    icon: <LuUser />,
-  },
-  {
-    title: "More",
-    icon: <SlOptions />,
-  },
-];
 export default function Home() {
-  const handleGoogleLogin = useCallback(async (cred: CredentialResponse) => {
-    const googleToken = cred.credential;
-    if (!googleToken) {
-      toast.error("Google login failed");
-      return;
-    }
-    const { verifyGoogleToken } = await graphqlClient.request(
-      veryUserGoogleTokenQuery,
-      { token: googleToken }
-    );
-    if (!verifyGoogleToken) {
-      toast.error("Google login failed");
-      return;
-    }
-    window.localStorage.setItem("token", googleToken);
-    toast.success("Google login successful");
+  const { user } = useCurrentUser();
+  const { tweets } = useTweets();
+  const { mutate: createTweet } = useCreateTweet();
+  const [content, setContent] = useState<string>("");
+  const [imageURL, setImageURL] = useState<string>("");
+
+  const handleInputChangeFile = useCallback((input: HTMLInputElement) => {
+    return async (e: Event) => {
+      e.preventDefault();
+      const file = input.files?.[0];
+      if (!file) return;
+
+      const { getSignedUrlForTweet } = await graphqlClient.request(
+        getSignedUrlForTweetQuery,
+        {
+          imageType: file.type.split("/")[1],
+        }
+      );
+
+      if (!getSignedUrlForTweet) return;
+      const toastId = toast.loading("Uploading image...");
+      const res = await axios.put(getSignedUrlForTweet, file, {
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+      toast.success("Image uploaded successfully", { id: toastId });
+      const url = new URL(getSignedUrlForTweet);
+      const filePath = `${url.origin}${url.pathname}`;
+      setImageURL(filePath);
+    };
   }, []);
+
+  const handleSelectImage = useCallback(() => {
+    const input = document.createElement("input");
+    input.setAttribute("type", "file");
+    input.setAttribute("accept", "image/*");
+
+    const handlerFn = handleInputChangeFile(input);
+
+    input.addEventListener("change", handlerFn);
+
+    input.click();
+  }, [handleInputChangeFile]);
+
+  const handleCreateTweet = useCallback(() => {
+    createTweet({ content, imageUrl: imageURL });
+    setContent("");
+    setImageURL("");
+  }, [content, createTweet, imageURL]);
+
   return (
-    <div>
-      <div className=" grid grid-cols-12 h-screen w-screen px-56">
-        <div className="flex flex-col justify-start pt-8 px-4 col-span-3">
-          <div className=" text-4xl w-fit h-fit hover:bg-gray-800 rounded-full p-2 cursor-pointer transition-all">
-            <FaTwitter />
-          </div>
-          <div>
-            <ul className="mt-4 flex flex-col gap-2">
-              {sidebarButtons.map((button, index) => (
-                <li
-                  key={button.title}
-                  className="flex font-semibold hover:bg-gray-800  gap-4 items-center rounded-full w-fit px-4 cursor-pointer py-2 "
-                >
-                  <div className=" text-2xl h-fit  rounded-full cursor-pointer">
-                    {button.icon}
-                  </div>
-                  <div>{button.title}</div>
-                </li>
-              ))}
-            </ul>
-            <div className="px-4">
-              <button className=" bg-[#1d9bf0] font-semibold text-lg mr-3 mt-5 rounded-full w-full text-center p-3">
-                Tweet
-              </button>
+    <>
+      <TwitterLayout>
+        <div>
+          <div className="border border-r-0 border-l-0 border-b-0 border-gray-600 p-5 hover:bg-slate-900 transition-all cursor-pointer">
+            <div className="grid grid-cols-12 gap-3">
+              <div className="col-span-1">
+                {user?.profileImageUrl && (
+                  <Image
+                    className="rounded-full"
+                    src={user?.profileImageUrl || ""}
+                    alt="user-image"
+                    height={50}
+                    width={50}
+                  />
+                )}
+              </div>
+              <div className="col-span-11">
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  className="w-full bg-transparent text-xl px-3 border-b border-slate-700"
+                  placeholder="What's happening?"
+                  rows={3}
+                ></textarea>
+                {imageURL && (
+                  <Image
+                    src={imageURL}
+                    alt="tweet-image"
+                    width={300}
+                    height={300}
+                  />
+                )}
+                <div className="mt-2 flex justify-between items-center">
+                  <BiImageAlt onClick={handleSelectImage} className="text-xl" />
+                  <button
+                    onClick={handleCreateTweet}
+                    className="bg-[#1d9bf0] font-semibold text-sm py-2 px-4 rounded-full"
+                  >
+                    Tweet
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <div className=" col-span-6 border-l-[1px] border-r-[1px] border-slate-400 ">
-          <FeedCard />
-          <FeedCard />
-          <FeedCard />
-          <FeedCard />
-        </div>
-        <div className=" col-span-3">
-          <div className=" p-5 bg-slate-700 rounded-lg">
-            <h1 className="my-2 text-2xl">New to Twitter</h1>
-            <GoogleLogin onSuccess={handleGoogleLogin} />
-          </div>
-        </div>
-      </div>
-    </div>
+        {tweets &&
+          tweets.length > 0 &&
+          tweets.map((tweet, index) => (
+            <FeedCard key={tweet?.id || index} tweet={tweet as Tweet} />
+          ))}
+      </TwitterLayout>
+    </>
   );
 }

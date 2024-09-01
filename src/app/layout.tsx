@@ -4,6 +4,7 @@ import "./globals.css";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { Toaster } from "react-hot-toast";
 const inter = Inter({ subsets: ["latin"] });
+import ReactQueryProvider from "./providers/queryClientProvider";
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -18,12 +19,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <GoogleOAuthProvider clientId="939540789758-tl6e37h6an0grjn2dmpa2j10a4rbldmf.apps.googleusercontent.com">
-          <div>
-            <Toaster />
-          </div>
-          {children}
-        </GoogleOAuthProvider>
+        <ReactQueryProvider>
+          <GoogleOAuthProvider clientId="939540789758-tl6e37h6an0grjn2dmpa2j10a4rbldmf.apps.googleusercontent.com">
+            <div>
+              <Toaster />
+            </div>
+            {children}
+          </GoogleOAuthProvider>
+        </ReactQueryProvider>
       </body>
     </html>
   );
